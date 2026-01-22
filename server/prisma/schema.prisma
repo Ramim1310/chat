@@ -1,0 +1,48 @@
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  email    String    @unique
+  password String
+  image    String?
+  messages Message[]
+  friends  User[]    @relation("UserFriends")
+  friendsOf User[]   @relation("UserFriends")
+  sentRequests     FriendRequest[] @relation("SentRequests")
+  receivedRequests FriendRequest[] @relation("ReceivedRequests")
+  
+  lastSeen DateTime @default(now())
+  bio      String?
+}
+
+model FriendRequest {
+  id         Int      @id @default(autoincrement())
+  senderId   Int
+  sender     User     @relation("SentRequests", fields: [senderId], references: [id])
+  receiverId Int
+  receiver   User     @relation("ReceivedRequests", fields: [receiverId], references: [id])
+  status     String   @default("pending") // pending, accepted, rejected
+  createdAt  DateTime @default(now())
+}
+
+model Message {
+  id        Int      @id @default(autoincrement())
+  content   String
+  timestamp DateTime @default(now())
+  senderId  Int
+  sender    User     @relation(fields: [senderId], references: [id])
+  room      String
+  
+  status      String   @default("sent") // sent, delivered, seen
+  deliveredAt DateTime?
+  seenAt      DateTime?
+}
