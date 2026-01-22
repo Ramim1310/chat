@@ -5,9 +5,16 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
+# Ignore node_modules in ANY folder (root, client, or server)
 node_modules/
+
+# Ignore local environment variables
 .env
+
+# Ignore build output folders
 dist/
+build/
+.next/
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
