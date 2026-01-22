@@ -7,7 +7,13 @@ function FriendRequests({ currentUser, onActionComplete }) {
   const [loading, setLoading] = useState(true);
 
   const fetchRequests = async () => {
+    if (!currentUser || !currentUser.id) {
+        setLoading(false);
+        return;
+    }
+    
     try {
+        console.log("Fetching requests for user:", currentUser.id);
         const response = await api.get(`/api/friend-request/pending/${currentUser.id}`);
         setRequests(response.data);
     } catch (error) {
@@ -19,7 +25,7 @@ function FriendRequests({ currentUser, onActionComplete }) {
   };
 
   useEffect(() => {
-    if (currentUser) fetchRequests();
+    fetchRequests();
   }, [currentUser]);
 
   const handleAction = async (requestId, action) => {

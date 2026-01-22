@@ -482,10 +482,16 @@ app.post('/api/friend-request/send', authenticateToken, async (req, res) => {
 // Get Pending Requests (Incoming)
 app.get('/api/friend-request/pending/:userId', authenticateToken, async (req, res) => {
     const { userId } = req.params;
+    const receiverId = parseInt(userId);
+    
+    if (isNaN(receiverId)) {
+        return res.status(400).json({ error: "Invalid user ID" });
+    }
+
     try {
         const requests = await prisma.friendRequest.findMany({
             where: {
-                receiverId: parseInt(userId),
+                receiverId: receiverId,
                 status: 'pending'
             },
             include: { sender: true }
