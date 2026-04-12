@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  email    String    @unique
+  password String
+  image    String?
+  messages Message[]
+  friends  User[]    @relation("UserFriends")
+  friendsOf User[]   @relation("UserFriends")
+  sentRequests     FriendRequest[] @relation("SentRequests")
+  receivedRequests FriendRequest[] @relation("ReceivedRequests")
+  
+  lastSeen DateTime @default(now())
+  bio      String?
+
+  createdCommunities Community[] @relation("CommunityCreator")
+  joinedCommunities  Community[] @relation("CommunityMembers")
+  posts              Post[]      @relation("UserPosts")
+  comments           Threaded_Comment[] @relation("UserComments")
+}
+
+model Community {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  creatorId   Int
+  creator     User     @relation("CommunityCreator", fields: [creatorId], references: [id])
+  
+  members     User[]   @relation("CommunityMembers")
+  posts       Post[]
+}
+
+model Post {
+  id          Int      @id @default(autoincrement())
+  title       String
+  content     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  authorId    Int
+  author      User     @relation("UserPosts", fields: [authorId], references: [id])
+
+  communityId Int
+  community   Community @relation(fields: [communityId], references: [id])
+
+  comments    Threaded_Comment[]
+  aiInsight   AI_Insight?
+}
+
+model Threaded_Comment {
+  id          Int      @id @default(autoincrement())
+  content     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  authorId    Int
+  author      User     @relation("UserComments", fields: [authorId], references: [id])
+
+  postId      Int
+  post        Post     @relation(fields: [postId], references: [id])
+
+  parentId    Int?
+  parent      Threaded_Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies     Threaded_Comment[] @relation("CommentReplies")
+}
+
+model AI_Insight {
+  id          Int      @id @default(autoincrement())
+  summary     String
+  keyPoints   String?
+  generatedAt DateTime @default(now())
+
+  postId      Int      @unique
+  post        Post     @relation(fields: [postId], references: [id])
+}
+
+model FriendRequest {
+  id         Int      @id @default(autoincrement())
+  senderId   Int
+  sender     User     @relation("SentRequests", fields: [senderId], references: [id])
+  receiverId Int
+  receiver   User     @relation("ReceivedRequests", fields: [receiverId], references: [id])
+  status     String   @default("pending") // pending, accepted, rejected
+  createdAt  DateTime @default(now())
+}
+
+model Message {
+  id        Int      @id @default(autoincrement())
+  content   String
+  timestamp DateTime @default(now())
+  senderId  Int
+  sender    User     @relation(fields: [senderId], references: [id])
+  room      String
+  
+  status      String   @default("sent") // sent, delivered, seen
+  deliveredAt DateTime?
+  seenAt      DateTime?
+}
+
+model NewsArticle {
+  id        Int      @id @default(autoincrement())
+  title     String
+  link      String   @unique
+  pubDate   DateTime
+  source    String?
+  category  String
+  createdAt DateTime @default(now())
+}
