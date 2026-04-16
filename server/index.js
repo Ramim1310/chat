@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const cookieParser = require('cookie-parser');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 dotenv.config();
 
@@ -20,14 +22,16 @@ const allowedOrigins = [
   process.env.CLIENT_URL, // Additional frontend URL from env
 ].filter(Boolean);
 
+const isDevelopment = process.env.NODE_ENV !== 'production';
+
 const corsOptions = {
   origin: (origin, callback) => {
     // Allow requests with no origin (mobile apps, curl, Postman)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
-    // In development or if no CLIENT_URL set, allow all
-    if (!process.env.CLIENT_URL) return callback(null, true);
-    callback(new Error(`CORS: Origin ${origin} not allowed`));
+    // Strict block if origin does not match in production
+    if (isDevelopment && !process.env.CLIENT_URL) return callback(null, true);
+    callback(new Error(`CORS Error: Origin ${origin} not allowed by security policy.`));
   },
   credentials: true
 };
@@ -48,9 +52,19 @@ const io = new Server(server, {
 const prisma = require('./db');
 const { summarizePost } = require('./services/aiService');
 
+app.use(helmet()); // Secure HTTP headers
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
+
+// Rate Limiter for Authentication routes
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, 
+  max: 15, 
+  message: { error: "Too many login attempts from this IP, please try again after 15 minutes" },
+  standardHeaders: true, 
+  legacyHeaders: false, 
+});
 
 app.get('/', (req, res) => {
   res.send('Server is running');
@@ -268,13 +282,13 @@ const generateRefreshToken = (user) => {
 const isProduction = process.env.NODE_ENV === 'production';
 const cookieConfig = {
   httpOnly: true,
-  secure: isProduction,        // HTTPS only in production
-  sameSite: isProduction ? 'none' : 'strict', // 'none' needed for cross-origin (Vercel + Render)
+  secure: isProduction || !!process.env.RENDER,        // Force HTTPS in production/Render
+  sameSite: (isProduction || !!process.env.RENDER) ? 'none' : 'strict', // 'none' needed for Vercel <-> Render
   maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
 };
 
 // Auth & User Routes
-app.post('/register', async (req, res) => {
+app.post('/register', authLimiter, async (req, res) => {
   const { name, email, password, image } = req.body;
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -299,7 +313,7 @@ app.post('/register', async (req, res) => {
   }
 });
 
-app.post('/login', async (req, res) => {
+app.post('/login', authLimiter, async (req, res) => {
   const { email, password } = req.body;
   try {
     const user = await prisma.user.findUnique({ 

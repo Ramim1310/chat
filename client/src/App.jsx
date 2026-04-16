@@ -46,11 +46,14 @@ function App() {
           setUser(JSON.parse(storedUser));
           setToken(storedToken);
           setView('chat');
-          // Refresh data from server, fall back to cache on error
-          fetchUserInfo().finally(() => {
-              clearTimeout(safetyTimer);
-              setIsInitializing(false);
-          });
+          
+          // CRITICAL FIX: Instantly drop the loading spinner using cached data,
+          // then fetch the updated profile in the background. This fixes the 2-3s delay.
+          clearTimeout(safetyTimer);
+          setIsInitializing(false);
+          
+          // Background sync
+          fetchUserInfo().catch(err => console.error('Background user sync failed:', err));
       } else {
           clearTimeout(safetyTimer);
           setIsInitializing(false);
