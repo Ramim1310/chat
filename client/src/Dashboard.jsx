@@ -535,7 +535,7 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                            </motion.div>
                        )
                      })}
-                     </AnimatePresence>}
+                     </AnimatePresence>
                      
                      <AnimatePresence>
                      {typingUsers.length > 0 && !room.includes('-') && ( /* Show in-feed typing only for group chats */
@@ -549,6 +549,31 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                                  <div className="bg-[var(--color-surface-container-lowest)] asymmetric-incoming p-4 rounded-2xl shadow-sm flex items-center gap-2 border border-[var(--color-outline-variant)]/5">
                                      <TypingIndicator />
                                      <span className="text-[10px] text-[var(--color-on-surface-variant)] ml-2">Someone is typing...</span>
+                                 </div>
+                             </div>
+                         </motion.div>
+                     )}
+                     {/* Self typing indicator — visible to the sender while composing */}
+                     {isTyping && (
+                         <motion.div
+                             id="typing-indicator"
+                             key="self-typing"
+                             initial={{ opacity: 0, y: 6 }}
+                             animate={{ opacity: 1, y: 0 }}
+                             exit={{ opacity: 0 }}
+                             className="flex gap-4 max-w-2xl ml-auto flex-row-reverse"
+                         >
+                             <div className="shrink-0 flex items-end">
+                                 <div className="w-8 h-8 rounded-lg bg-[var(--color-primary-fixed)] mt-auto flex items-center justify-center text-[10px] font-black text-[var(--color-on-primary-fixed-variant)]">ME</div>
+                             </div>
+                             <div className="flex flex-col items-end space-y-1">
+                                 <div className="bg-gradient-to-br from-[var(--color-primary)]/70 to-[var(--color-primary-dim)]/70 px-5 py-3 rounded-2xl asymmetric-outgoing flex items-center gap-2 shadow-sm">
+                                     <span className="flex gap-1 items-center">
+                                         <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-on-primary)] animate-bounce" style={{ animationDelay: '0ms' }} />
+                                         <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-on-primary)] animate-bounce" style={{ animationDelay: '150ms' }} />
+                                         <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-on-primary)] animate-bounce" style={{ animationDelay: '300ms' }} />
+                                     </span>
+                                     <span className="text-[10px] text-[var(--color-on-primary)]/80 font-semibold">You are typing...</span>
                                  </div>
                              </div>
                          </motion.div>
@@ -570,6 +595,7 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                          </div>
                          <div className="flex-1 relative">
                              <input 
+                                 id="message-input"
                                  className="w-full h-14 pl-6 pr-14 rounded-2xl bg-[var(--color-surface-container-lowest)] border-none ring-1 ring-[var(--color-outline-variant)]/20 focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none transition-all font-body text-[var(--color-on-surface)] placeholder:text-[var(--color-outline-variant)]" 
                                  placeholder="Type a thoughtful response..." 
                                  type="text"
@@ -582,6 +608,7 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                              </button>
                          </div>
                          <button 
+                             id="send-message-btn"
                              onClick={sendMessage}
                              disabled={!message.trim()}
                              className="w-14 h-14 shrink-0 rounded-2xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-dim)] text-[var(--color-on-primary)] flex items-center justify-center shadow-[0_12px_24px_rgba(74,64,224,0.25)] hover:scale-105 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:scale-100 disabled:shadow-none"

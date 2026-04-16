@@ -82,7 +82,7 @@ export default function Settings({ user, onUserUpdate }) {
     setSavingProfile(false);
   };
 
-  const hasProfileChanges = (name !== user?.name && name.trim()) || !!imageBase64;
+  const hasProfileChanges = !!name.trim() || !!imageBase64;
 
   const THEMES = [
     { label: 'Light', icon: 'light_mode' },
@@ -156,7 +156,7 @@ export default function Settings({ user, onUserUpdate }) {
               </div>
 
               <div className="flex items-center gap-2 pt-2">
-                <button onClick={handleSaveProfile} disabled={!hasProfileChanges || savingProfile}
+                <button id="save-profile-btn" onClick={handleSaveProfile} disabled={!hasProfileChanges || savingProfile}
                   className="px-6 py-2.5 rounded-xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-dim,#3d30d4)] text-[var(--color-on-primary)] font-bold text-sm shadow-[0_8px_20px_rgba(74,64,224,0.2)] hover:scale-105 active:scale-95 transition-all disabled:opacity-40 disabled:scale-100">
                   {savingProfile ? 'Saving...' : 'Save Changes'}
                 </button>
