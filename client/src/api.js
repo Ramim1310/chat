@@ -48,10 +48,11 @@ api.interceptors.response.use(
         return api(originalRequest);
         
       } catch (refreshError) {
-        // Refresh failed (expired/invalid) -> Logout
+        // Refresh failed (expired/invalid) -> signal logout without hard reload
         console.error("Session expired", refreshError);
         localStorage.removeItem('token');
-        window.location.href = '/'; // or handle logout via callback
+        localStorage.removeItem('user');
+        window.dispatchEvent(new Event('auth:logout'));
         return Promise.reject(refreshError);
       }
     }
