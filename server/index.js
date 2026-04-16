@@ -16,7 +16,8 @@ const server = http.createServer(app);
 const allowedOrigins = [
   "http://localhost:5173", 
   "http://127.0.0.1:5173",
-  process.env.CLIENT_URL, // Production frontend URL from env
+  "https://nexus-app13.vercel.app", // Production frontend
+  process.env.CLIENT_URL, // Additional frontend URL from env
 ].filter(Boolean);
 
 const corsOptions = {
