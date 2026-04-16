@@ -214,7 +214,7 @@ export default function CommunityFeed({ user, onBack }) {
       {/* ── TOP NAV ── */}
       <header className="h-[60px] bg-white shrink-0 flex items-center justify-between px-6 border-b border-gray-100 z-50 shadow-sm">
         <button onClick={onBack} className="flex items-center gap-1 group shrink-0">
-          <span className="text-[#4a40e0] font-black text-xl tracking-tight" style={{ fontFamily: "'Manrope', sans-serif" }}>The Cognitive Gallery</span>
+          <span className="text-[#4a40e0] font-black text-xl tracking-tight" style={{ fontFamily: "'Manrope', sans-serif" }}>NEXUS</span>
         </button>
         <nav className="hidden md:flex items-center gap-6">
           {['Gaming', 'Sports', 'Movies', 'Anime', 'Politics'].map(cat => (
@@ -227,7 +227,7 @@ export default function CommunityFeed({ user, onBack }) {
         <div className="flex items-center gap-3 shrink-0">
           <div className="flex items-center gap-2 bg-gray-100 rounded-full px-4 py-2 text-sm text-gray-400">
             <span className="material-symbols-outlined text-[18px]">search</span>
-            <span className="hidden sm:block">Explore thoughts...</span>
+            <span className="hidden sm:block">Search NEXUS...</span>
           </div>
           <button className="p-2 rounded-full hover:bg-gray-100 text-gray-500"><span className="material-symbols-outlined">notifications</span></button>
           <button className="p-2 rounded-full hover:bg-gray-100 text-gray-500"><span className="material-symbols-outlined">settings</span></button>
@@ -245,11 +245,11 @@ export default function CommunityFeed({ user, onBack }) {
         <aside className="hidden md:flex flex-col w-[200px] bg-white shrink-0 border-r border-gray-100 py-6 px-4">
           <div className="flex items-center gap-3 mb-8 px-2">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#4a40e0] to-[#9795ff] flex items-center justify-center">
-              <span className="material-symbols-outlined text-white text-[18px]">auto_awesome</span>
+              <span className="material-symbols-outlined text-white text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>hub</span>
             </div>
             <div>
-              <p className="font-black text-[#4a40e0] text-sm leading-tight" style={{ fontFamily: "'Manrope', sans-serif" }}>The Gallery</p>
-              <p className="text-[9px] text-gray-400 tracking-widest uppercase">Curated Thoughts</p>
+              <p className="font-black text-[#4a40e0] text-sm leading-tight" style={{ fontFamily: "'Manrope', sans-serif" }}>NEXUS</p>
+              <p className="text-[9px] text-gray-400 tracking-widest uppercase">Community</p>
             </div>
           </div>
 

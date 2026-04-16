@@ -12,11 +12,11 @@ function Sidebar({ onLogout, onTabChange, initialTab = 'chats', className = '' }
     <aside className={`h-screen w-72 left-0 top-0 sticky bg-[var(--color-surface-container-low)] flex flex-col py-8 px-6 space-y-8 z-40 transition-all ease-in-out duration-300 border-r ghost-border shrink-0 hidden md:flex ${className}`}>
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] flex items-center justify-center shadow-lg shrink-0">
-          <span className="material-symbols-outlined text-[var(--color-on-primary)]" style={{ fontVariationSettings: "'FILL' 1" }}>gallery_thumbnail</span>
+          <span className="material-symbols-outlined text-[var(--color-on-primary)]" style={{ fontVariationSettings: "'FILL' 1" }}>hub</span>
         </div>
         <div className="min-w-0">
-          <h1 className="font-display font-black text-[var(--color-primary)] tracking-tight truncate text-lg">Cognitive Gallery</h1>
-          <p className="font-display font-semibold tracking-wide uppercase text-[10px] text-[var(--color-on-surface-variant)] truncate">Editorial Thought</p>
+          <h1 className="font-display font-black text-[var(--color-primary)] tracking-tight truncate text-lg">NEXUS</h1>
+          <p className="font-display font-semibold tracking-wide uppercase text-[10px] text-[var(--color-on-surface-variant)] truncate">Real-Time Connection</p>
         </div>
       </div>
 

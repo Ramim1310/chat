@@ -116,8 +116,8 @@ export default function Settings({ user, onUserUpdate }) {
       <div className="max-w-[1100px] mx-auto px-6 md:px-10 py-10">
         {/* Hero */}
         <div className="mb-8">
-          <h2 className="text-4xl font-black text-[var(--color-on-surface)] mb-1" style={{ fontFamily: "'Manrope', sans-serif" }}>Configure Your Experience</h2>
-          <p className="text-sm text-[var(--color-on-surface-variant)]">Tailor the architecture of your thoughts and visual environment.</p>
+          <h2 className="text-4xl font-black text-[var(--color-on-surface)] mb-1" style={{ fontFamily: "'Manrope', sans-serif" }}>Your Settings</h2>
+          <p className="text-sm text-[var(--color-on-surface-variant)]">Personalise your NEXUS experience — appearance, privacy, and account details.</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
@@ -251,46 +251,55 @@ export default function Settings({ user, onUserUpdate }) {
           {/* ── RIGHT ───────────────────────────────────────────────────── */}
           <div className="space-y-5">
 
-            {/* Inner Circle */}
-            <div className="bg-gradient-to-br from-gray-900 to-slate-800 rounded-2xl p-6 space-y-4">
-              <h3 className="text-white font-black text-xl" style={{ fontFamily: "'Manrope', sans-serif" }}>Join the Inner Circle</h3>
-              <p className="text-gray-300 text-xs leading-relaxed">Unlock editorial analytics, premium themes, and unlimited gallery storage for your curated discussions.</p>
-              <button className="w-full py-3 bg-white rounded-xl text-gray-900 font-black text-xs tracking-widest uppercase hover:bg-gray-100 transition-colors">Upgrade to Pro</button>
+            {/* NEXUS Pro upgrade card */}
+            <div className="rounded-2xl p-6 space-y-4 overflow-hidden relative" style={{ background: 'linear-gradient(135deg, #0f0c29, #302b63, #24243e)' }}>
+              {/* Glowing orb decoration */}
+              <div className="absolute -top-6 -right-6 w-28 h-28 rounded-full bg-[var(--color-primary)]/30 blur-2xl pointer-events-none" />
+              <div className="relative z-10">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="material-symbols-outlined text-[var(--color-primary)] text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
+                  <span className="text-[10px] font-black tracking-widest uppercase text-[var(--color-primary)]">NEXUS Pro</span>
+                </div>
+                <h3 className="text-white font-black text-xl mb-2" style={{ fontFamily: "'Manrope', sans-serif" }}>Unlock the Full Network</h3>
+                <p className="text-gray-300 text-xs leading-relaxed mb-4">Get unlimited message history, priority matching, custom community themes, and advanced analytics to grow your connections.</p>
+                <button className="w-full py-3 rounded-xl font-black text-xs tracking-widest uppercase transition-all hover:scale-105 active:scale-95" style={{ background: 'linear-gradient(90deg, var(--color-primary), #7c3aed)', color: 'white' }}>
+                  Upgrade to Pro
+                </button>
+              </div>
             </div>
 
-            {/* Stats */}
+            {/* Connection Stats */}
             <div className="bg-[var(--color-surface-container-lowest)] rounded-2xl border border-[var(--color-outline-variant)]/15 shadow-sm p-6 space-y-4">
               <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[var(--color-primary)] text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
-                <h3 className="font-black text-[var(--color-on-surface)] text-base" style={{ fontFamily: "'Manrope', sans-serif" }}>Gallery Statistics</h3>
-              </div>
-              <div>
-                <p className="text-3xl font-black text-[var(--color-on-surface)]">1.4 GB</p>
-                <div className="flex items-center justify-between mt-0.5 mb-2">
-                  <p className="text-[10px] font-bold tracking-widest uppercase text-[var(--color-outline)]">Storage Used</p>
-                  <p className="text-[10px] text-[var(--color-on-surface-variant)]">14% of 10GB</p>
-                </div>
-                <div className="w-full h-1.5 bg-[var(--color-surface-container-high)] rounded-full overflow-hidden">
-                  <div className="h-full w-[14%] bg-gradient-to-r from-[var(--color-primary)] to-teal-400 rounded-full" />
-                </div>
+                <span className="material-symbols-outlined text-[var(--color-primary)] text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>network_node</span>
+                <h3 className="font-black text-[var(--color-on-surface)] text-base" style={{ fontFamily: "'Manrope', sans-serif" }}>Your Network</h3>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                {[{ label: 'Collections', val: '24' }, { label: 'Threads', val: '1.2k' }].map(({ label, val }) => (
-                  <div key={label} className="bg-[var(--color-surface-container-low)] rounded-xl p-3 border border-[var(--color-outline-variant)]/10">
+                {[
+                  { label: 'Friends',      val: `${user?.friends?.length ?? 0}`,  icon: 'group' },
+                  { label: 'Communities', val: '3',    icon: 'forum' },
+                ].map(({ label, val, icon }) => (
+                  <div key={label} className="bg-[var(--color-surface-container-low)] rounded-xl p-4 border border-[var(--color-outline-variant)]/10 flex flex-col gap-1">
+                    <span className="material-symbols-outlined text-[var(--color-primary)] text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>{icon}</span>
                     <p className="text-xl font-black text-[var(--color-on-surface)]">{val}</p>
-                    <p className="text-[10px] font-bold tracking-widest uppercase text-[var(--color-outline)] mt-0.5">{label}</p>
+                    <p className="text-[10px] font-bold tracking-widest uppercase text-[var(--color-outline)]">{label}</p>
                   </div>
                 ))}
+              </div>
+              {/* Active status */}
+              <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                <p className="text-xs text-emerald-600 font-semibold">You're connected to NEXUS</p>
               </div>
             </div>
 
             {/* Danger Zone */}
-            <div className="bg-red-50 rounded-2xl border border-red-100 p-6 space-y-3" style={{ background: 'rgba(239,68,68,0.05)', borderColor: 'rgba(239,68,68,0.15)' }}>
+            <div className="rounded-2xl border p-6 space-y-3" style={{ background: 'rgba(239,68,68,0.05)', borderColor: 'rgba(239,68,68,0.15)' }}>
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-red-500 text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>error</span>
                 <h3 className="font-black text-[var(--color-on-surface)] text-base" style={{ fontFamily: "'Manrope', sans-serif" }}>Danger Zone</h3>
               </div>
-              <p className="text-xs text-[var(--color-on-surface-variant)] leading-relaxed">Permanently delete your cognitive profile and all gallery data.</p>
+              <p className="text-xs text-[var(--color-on-surface-variant)] leading-relaxed">Permanently delete your NEXUS account, all messages, and community posts. This action cannot be undone.</p>
               <button onClick={() => toast.error('Account deactivation requires email confirmation. Contact support.')}
                 className="text-red-500 font-black text-xs tracking-widest uppercase hover:text-red-700 transition-colors">
                 Deactivate Account
@@ -298,8 +307,8 @@ export default function Settings({ user, onUserUpdate }) {
             </div>
 
             <div className="px-2 py-1">
-              <p className="text-xs text-[var(--color-on-surface-variant)] font-semibold">The Cognitive Gallery</p>
-              <p className="text-[10px] text-[var(--color-outline)]">Version 2.4.0 — Architecture of Thought</p>
+              <p className="text-xs text-[var(--color-on-surface-variant)] font-semibold">NEXUS</p>
+              <p className="text-[10px] text-[var(--color-outline)]">Version 1.0.0 — Real-Time Connection Platform</p>
             </div>
           </div>
         </div>

@@ -12,6 +12,7 @@ function App() {
   const [token, setToken] = useState(null);
   const [view, setView] = useState("login"); // login, signup, welcome, chat
   const [initialViewTab, setInitialViewTab] = useState("chats");
+  const [isInitializing, setIsInitializing] = useState(true);
 
   const fetchUserInfo = async (preloadedUser = null) => {
       if (preloadedUser) {
@@ -41,7 +42,9 @@ function App() {
           setView('chat');
           
           // Refresh data immediately
-          fetchUserInfo();
+          fetchUserInfo().finally(() => setIsInitializing(false));
+      } else {
+          setIsInitializing(false);
       }
   }, []);
 
@@ -71,6 +74,24 @@ function App() {
   return (
     <ThemeProvider>
     <div className="App">
+      {isInitializing ? (
+        <div className="flex items-center justify-center min-h-screen bg-[var(--color-surface)]">
+          <div className="flex flex-col items-center gap-5">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-container)] flex items-center justify-center shadow-xl">
+              <span className="material-symbols-outlined text-[var(--color-on-primary)] text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>hub</span>
+            </div>
+            <div className="flex flex-col items-center gap-2">
+              <div className="flex gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[var(--color-primary)] animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                <span className="w-2 h-2 rounded-full bg-[var(--color-primary)] animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                <span className="w-2 h-2 rounded-full bg-[var(--color-primary)] animate-bounce" style={{ animationDelay: '300ms' }}></span>
+              </div>
+              <p className="text-xs font-body font-semibold text-[var(--color-on-surface-variant)] tracking-widest uppercase">Loading...</p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
       {view === "login" && (
         <Login 
           onLogin={handleLogin} 
@@ -110,6 +131,8 @@ function App() {
           </motion.div>
         )}
       </AnimatePresence>
+      </>
+      )}
     </div>
     </ThemeProvider>
   );

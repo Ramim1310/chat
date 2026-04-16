@@ -5,14 +5,19 @@ function Login({ onLogin, onSwitchToSignup }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsLoading(true);
+    setError("");
     try {
       const response = await api.post('/login', { email, password });
       onLogin(response.data.user, response.data.token);
     } catch (err) {
       setError(err.response?.data?.error || "Login failed");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -44,8 +49,20 @@ function Login({ onLogin, onSwitchToSignup }) {
               required
             />
           </div>
-          <button type="submit" className="w-full cta-gradient text-[var(--color-on-primary)] shadow-ambient hover:scale-105 active:scale-95 p-3 rounded-lg font-bold transition-all">
-            Log In
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full cta-gradient text-[var(--color-on-primary)] shadow-ambient hover:scale-105 active:scale-95 p-3 rounded-lg font-bold transition-all disabled:opacity-70 disabled:scale-100 flex items-center justify-center gap-2"
+          >
+            {isLoading ? (
+              <>
+                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                Signing in...
+              </>
+            ) : 'Log In'}
           </button>
         </form>
         <p className="mt-6 text-center text-sm text-[var(--color-on-surface-variant)]">

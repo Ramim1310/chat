@@ -20,7 +20,7 @@ function WelcomeScreen({ name, onStart }) {
           transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
           className="text-xl md:text-2xl text-gray-300 mb-12"
         >
-          Let's connect with your friends.
+          Chat in real-time. Connect with communities.
         </motion.p>
         
         <div className="flex flex-col md:flex-row gap-4 justify-center items-center">
