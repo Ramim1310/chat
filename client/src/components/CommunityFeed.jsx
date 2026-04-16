@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../api';
 import { motion, AnimatePresence } from 'framer-motion';
+import toast, { Toaster } from 'react-hot-toast';
 
 const CATEGORIES = ['All Categories', 'Gaming', 'Sports', 'Movies', 'Anime', 'Politics'];
 
@@ -176,14 +177,24 @@ export default function CommunityFeed({ user, onBack }) {
   // ── Submit Post ───────────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!title.trim() || !content.trim()) return;
+    if (!title.trim() || !content.trim()) {
+      toast.error('Please fill in both the title and content.');
+      return;
+    }
     setIsSubmitting(true);
     try {
       await api.post('/api/posts', { title, content, communityName });
+      toast.success('Post published! 🎉');
       setTitle(''); setContent(''); setShowCreatePost(false);
-      fetchPosts(); setTimeout(fetchPosts, 3500);
-    } catch (e) { console.error(e); }
-    setIsSubmitting(false);
+      fetchPosts();
+      setTimeout(fetchPosts, 3500);
+    } catch (err) {
+      console.error('Post creation failed:', err);
+      const msg = err.response?.data?.error || 'Failed to publish post. Please try again.';
+      toast.error(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // ── Submit Comment ────────────────────────────────────────────────────────
@@ -196,8 +207,12 @@ export default function CommunityFeed({ user, onBack }) {
       await api.post(`/api/posts/${postId}/comments`, { content: cmt });
       setCommentInputs(prev => ({ ...prev, [postId]: '' }));
       fetchPosts();
-    } catch (e) { console.error(e); }
-    setSubmittingCommentId(null);
+    } catch (err) {
+      console.error('Comment failed:', err);
+      toast.error('Failed to post comment. Please try again.');
+    } finally {
+      setSubmittingCommentId(null);
+    }
   };
 
   // ── Filtered posts ────────────────────────────────────────────────────────
@@ -210,6 +225,7 @@ export default function CommunityFeed({ user, onBack }) {
 
   return (
     <div className="w-full h-full flex flex-col bg-[#f0f2fa] overflow-hidden" style={{ fontFamily: "'Inter', sans-serif" }}>
+      <Toaster position="top-center" toastOptions={{ style: { fontFamily: "'Inter', sans-serif", fontSize: '13px' } }} />
 
       {/* ── TOP NAV ── */}
       <header className="h-[60px] bg-white shrink-0 flex items-center justify-between px-6 border-b border-gray-100 z-50 shadow-sm">
