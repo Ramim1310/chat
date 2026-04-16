@@ -37,8 +37,12 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       
       try {
-        // Attempt refresh
-        const { data } = await api.post('/refresh_token');
+        // Attempt refresh using plain axios to avoid interceptor loop
+        const { data } = await axios.post(
+          `${api.defaults.baseURL}/refresh_token`, 
+          {}, 
+          { withCredentials: true }
+        );
         
         // Update local storage / state with new token
         localStorage.setItem('token', data.accessToken);
