@@ -28,24 +28,46 @@ function App() {
           setUser(response.data);
           localStorage.setItem('user', JSON.stringify(response.data));
       } catch (error) {
-          console.error("Failed to fetch user info", error);
+          console.error("Failed to fetch user info — using cached data", error);
+          // Fall back to cached user so the app still loads
+          const cached = localStorage.getItem('user');
+          if (cached) setUser(JSON.parse(cached));
       }
   };
 
   useEffect(() => {
       const storedUser = localStorage.getItem('user');
       const storedToken = localStorage.getItem('token');
+
+      // Safety net: never hang on loading screen longer than 8 seconds
+      const safetyTimer = setTimeout(() => setIsInitializing(false), 8000);
+
       if (storedUser && storedToken) {
           setUser(JSON.parse(storedUser));
           setToken(storedToken);
-          // Skip welcome screen if returning user
           setView('chat');
-          
-          // Refresh data immediately
-          fetchUserInfo().finally(() => setIsInitializing(false));
+          // Refresh data from server, fall back to cache on error
+          fetchUserInfo().finally(() => {
+              clearTimeout(safetyTimer);
+              setIsInitializing(false);
+          });
       } else {
+          clearTimeout(safetyTimer);
           setIsInitializing(false);
       }
+
+      // Listen for session expiry signalled by the API interceptor
+      const handleAuthLogout = () => {
+          setUser(null);
+          setToken(null);
+          setView('login');
+          setIsInitializing(false);
+      };
+      window.addEventListener('auth:logout', handleAuthLogout);
+      return () => {
+          clearTimeout(safetyTimer);
+          window.removeEventListener('auth:logout', handleAuthLogout);
+      };
   }, []);
 
   const handleLogin = (userData, authToken) => {

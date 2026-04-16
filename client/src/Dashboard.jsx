@@ -474,7 +474,7 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                      </div>
                      )}
                      
-                     {!isMessagesLoading && <AnimatePresence>
+                     {!isMessagesLoading && (<AnimatePresence>
                      {messageList.map((messageContent, index) => {
                        const isMe = (messageContent.sender?.name === username) || (messageContent.author === username);
                        const currentSender = messageContent.sender?.name || messageContent.author;
@@ -535,7 +535,7 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
                            </motion.div>
                        )
                      })}
-                     </AnimatePresence>
+                     </AnimatePresence>)}
                      
                      <AnimatePresence>
                      {typingUsers.length > 0 && !room.includes('-') && ( /* Show in-feed typing only for group chats */
