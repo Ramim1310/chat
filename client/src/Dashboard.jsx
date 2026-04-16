@@ -3,30 +3,34 @@ import socket from "./socket";
 import Sidebar from "./components/Sidebar";
 import LiveThread from "./components/LiveThread";
 import CommunityFeed from "./components/CommunityFeed";
+import Settings from "./components/Settings";
+import SearchUsers from "./components/SearchUsers";
+import FriendRequests from "./components/FriendRequests";
 import TypingIndicator from "./components/TypingIndicator";
 import EmptyState from "./components/EmptyState";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from './api';
 import toast, { Toaster } from 'react-hot-toast';
+import { useTheme } from './ThemeContext';
 
 function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
+  const { playSound, showNotification } = useTheme();
   const [username, setUsername] = useState(user?.name || "Anonymous");
   const [room, setRoom] = useState(localStorage.getItem('activeRoom') || "");
   const [chatName, setChatName] = useState(localStorage.getItem('activeChatName') || "");
   const [activeTab, setActiveTab] = useState(initialTab);
 
   const [message, setMessage] = useState("");
-  // Removed manual messageList state - relying on Query
   const [showChat, setShowChat] = useState(false);
   const [isTyping, setIsTyping] = useState(false); 
   const [typingUsers, setTypingUsers] = useState([]);
   const [activeUsers, setActiveUsers] = useState([]);
+  const [showDetailPane, setShowDetailPane] = useState(false);
   const messagesEndRef = React.useRef(null); 
 
   const queryClient = useQueryClient();
 
-  // Queries
   const { data: messageList = [] } = useQuery({
     queryKey: ['messages', room],
     queryFn: async () => {
@@ -34,10 +38,9 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
       return data;
     },
     enabled: !!room,
-    staleTime: Infinity, // handled by sockets
+    staleTime: Infinity,
   });
 
-  // Mutations
   const mutation = useMutation({
     mutationFn: (newMessage) => {
       return api.post('/api/messages', newMessage);
@@ -45,14 +48,10 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
     onMutate: async (newMessage) => {
       await queryClient.cancelQueries({ queryKey: ['messages', room] });
       const previousMessages = queryClient.getQueryData(['messages', room]);
-      
-      // Optimistic update
       queryClient.setQueryData(['messages', room], (old) => [...(old || []), newMessage]);
-      
       return { previousMessages };
     },
     onError: (err, newMessage, context) => {
-      // Do not rollback - mark as error so user knows
       queryClient.setQueryData(['messages', room], (old) => {
           if (!old) return old;
           return old.map(m => (m.tempId === newMessage.tempId) ? { ...m, status: 'error' } : m);
@@ -60,16 +59,11 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
       console.error("Failed to send message", err);
     },
     onSuccess: (response, variables) => {
-        // response.data is the real message from server
-        // variables is the payload we sent (containing tempId)
         const serverMessage = response.data;
         queryClient.setQueryData(['messages', room], (old) => {
             if (!old) return old;
             return old.map(m => (m.tempId === variables.tempId) ? { ...serverMessage, status: 'sent', tempId: variables.tempId } : m);
         });
-    },
-    onSettled: () => {
-       // queryClient.invalidateQueries({ queryKey: ['messages', room] });
     },
   });
 
@@ -88,6 +82,7 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
       socket.emit("join_room", r);
       if(!showChat) setShowChat(true);
       setRoom(r);
+      setShowDetailPane(false);
       const name = friendlyName || r;
       setChatName(name);
 
@@ -123,7 +118,6 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
         tempId: tempId
       };
 
-      // Trigger mutation
       mutation.mutate(messageData);
       
       setMessage("");
@@ -152,20 +146,19 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
     }
 
     const handleReceiveMessage = (data) => {
-       // Only update if message is for current active room
-       if (data.room !== room) {
-           console.log(`Message for room ${data.room} ignored, current room is ${room}`);
-           return;
-       }
-       
-       // Update Query Cache
+       if (data.room !== room) return;
        queryClient.setQueryData(['messages', room], (old) => {
            if (!old) return [data];
-           // Check dedupe logic
            const exists = old.find(m => (m.id && m.id === data.id) || (m.tempId && m.tempId === data.tempId));
            if (exists) return old; 
            return [...old, data];
        });
+       // Play sound + browser notification for incoming messages (not own)
+       const senderName = data.sender?.name || data.author || '';
+       if (senderName !== username) {
+         playSound();
+         showNotification(`${senderName}`, data.content?.slice(0, 80));
+       }
     };
     
     const handleDisplayTyping = (userId) => {
@@ -182,14 +175,9 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
     };
 
     const handleFriendRequest = (data) => {
-        setNotification({
-            message: `New friend request from ${data.senderName}!`,
-            type: 'info'
-        });
-        setTimeout(() => setNotification(null), 5000);
+        toast.info(`New friend request from ${data.senderName}!`);
     };
 
-  /* New: Handle Message Status Updates */
     const handleMessageSent = (data) => {
         queryClient.setQueryData(['messages', room], (old) => {
             if (!old) return old;
@@ -225,14 +213,12 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
         socket.off("message_sent", handleMessageSent);
         socket.off("messages_seen", handleMessagesSeen);
     }
-  }, [socket, user, room]); // added room dependency for seen logic
+  }, [socket, user, room, username, queryClient]); 
 
   useEffect(() => {
     if (user) {
-        // Load persisted room or default to general
         const persistedRoom = localStorage.getItem('activeRoom');
         const persistedName = localStorage.getItem('activeChatName');
-        
         if (persistedRoom) {
             joinRoom(persistedRoom, persistedName || persistedRoom);
         } else {
@@ -241,249 +227,437 @@ function Dashboard({ user, onLogout, refreshUser, initialTab = 'chats' }) {
     }
   }, [user]);
 
-  // Mark messages as seen when entering room or receiving new ones
   useEffect(() => {
     if (room && user) {
-        // Emit mark read
         socket.emit('mark_messages_read', { room, userId: user.id });
     }
   }, [room, messageList, user]);
 
-
-  // Dashboard Screen
   return (
-    <div className="flex items-center justify-center h-screen w-full p-4 lg:p-8 font-inter overflow-hidden">
-      <Toaster 
-        position="top-center"
-        toastOptions={{
-          style: {
-            background: 'rgba(17, 25, 40, 0.9)',
-            backdropFilter: 'blur(12px)',
-            color: '#fff',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-          },
-        }}
-      />
-      
-      {/* Main Glass Container */}
-      <div className="glass-panel w-full max-w-[1600px] h-full flex rounded-3xl overflow-hidden shadow-2xl relative">
-        
-        <Sidebar 
-          users={activeUsers} 
-          joinRoom={joinRoom} 
-          activeRoom={room} 
-          currentUser={user} 
-          onUserClick={startPrivateChat}
+    <div className="flex bg-[var(--color-surface)] text-[var(--color-on-surface)] font-body h-screen w-full overflow-hidden selection:bg-[var(--color-primary-container)] selection:text-[var(--color-on-primary-container)]">
+      <Toaster position="top-center" />
+
+      {/* Full-screen Forum — hide chat chrome */}
+      {activeTab === 'community' ? (
+        <div className="w-full h-full overflow-hidden">
+          <CommunityFeed user={user} onBack={() => setActiveTab('chats')} />
+        </div>
+      ) : activeTab === 'settings' ? (
+        <div className="w-full h-full overflow-hidden flex">
+          <Sidebar onLogout={onLogout} onTabChange={setActiveTab} initialTab={activeTab} />
+          <Settings user={user} onUserUpdate={(updatedUser) => { refreshUser(updatedUser); }} />
+        </div>
+      ) : (
+      <>
+      {/* 3-Pane Layout Navigation Sidebar */}
+      <Sidebar 
           onLogout={onLogout}
           onTabChange={setActiveTab}
-          onFriendAction={refreshUser}
           initialTab={initialTab}
-        />
-        
-        {/* Main Content Area */}
-        <AnimatePresence mode="wait">
-        {activeTab === 'community' ? (
-          <motion.div 
-            key="community-feed"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.3 }}
-            className="flex-1 h-full relative"
-          >
-             <CommunityFeed user={user} />
-          </motion.div>
-        ) : activeTab !== 'chats' ? (
-          <motion.div 
-            key="empty-state"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.3 }}
-            className="flex-1 h-full relative"
-          >
-            <EmptyState type={activeTab} />
-          </motion.div>
-        ) : (
-          <motion.div 
-            key="chat-interface"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="flex-1 flex flex-col h-full relative bg-black/20"
-          >
-            {/* Glass Header */}
-            <div className="h-20 glass flex items-center justify-between px-8 border-b border-white/10 z-20">
-                <div className="flex flex-col">
-                    <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-indigo-400 tracking-tight">
-                      {room.includes('-') ? (chatName || 'Private Chat') : `#${chatName || room}`}
+          className="zen-hide"
+      />
+      
+      {/* Main Content Area (Middle Pane + Right Pane) */}
+      <main className="flex-grow flex flex-col md:flex-row h-full">
+         
+         {/* Middle Pane: Inbox List — hidden when a chat is active */}
+         <section className={`w-full md:w-[420px] bg-[var(--color-surface)] flex flex-col z-10 border-r ghost-border zen-hide ${showChat && room ? 'hidden md:flex' : 'flex'}`}>
+            <div className="p-8 space-y-6">
+                <div className="flex items-center justify-between">
+                    <h2 className="font-display text-3xl font-bold tracking-tight text-[var(--color-on-surface)]">
+                        {activeTab === 'chats' ? 'Inbox' : activeTab === 'community' ? 'Forum' : activeTab === 'search' ? 'Search' : 'Requests'}
                     </h2>
-                    {/* Status Indicator */}
-                    {room.includes('-') && (
-                      <div className="flex items-center mt-1">
-                          {(() => {
-                              const isOnline = activeUsers.some(u => u.name === chatName);
-                              return (
-                                  <>
-                                      <span className={`w-2 h-2 rounded-full mr-2 shadow-[0_0_8px_rgba(0,0,0,0.5)] ${isOnline ? 'bg-emerald-500 shadow-emerald-500/50' : 'bg-slate-500'}`}></span>
-                                      <span className="text-xs text-slate-400 font-medium tracking-wide">{isOnline ? 'Online' : 'Offline'}</span>
-                                  </>
-                              );
-                          })()}
-                      </div>
+                    {activeTab === 'chats' && (
+                        <button className="w-10 h-10 rounded-full bg-[var(--color-surface-container-low)] flex items-center justify-center hover:bg-[var(--color-surface-container-high)] transition-colors">
+                            <span className="material-symbols-outlined text-[var(--color-on-surface-variant)]">edit_square</span>
+                        </button>
                     )}
                 </div>
-                
-                {/* User Controls */}
-                <div className="flex items-center gap-6">
-                    <div className="flex items-center gap-3 pl-6 border-l border-white/10">
-                        <div className="relative">
-                           {user?.image ? (
-                                <img src={user.image} alt={user.name} className="w-10 h-10 rounded-full border-2 border-indigo-500/50 shadow-lg" />
-                            ) : (
-                                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center text-white font-bold shadow-lg text-sm">
-                                    {user?.name?.charAt(0).toUpperCase()}
-                                </div>
-                            )}
-                            <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-[#1a1f2e]"></div>
-                        </div>
-                        <div className="hidden md:flex flex-col">
-                          <span className="font-semibold text-gray-200 text-sm">{user?.name}</span>
-                          <span className="text-[10px] text-gray-400">Active Now</span>
+
+                {activeTab === 'chats' && (
+                    <div className="relative">
+                        <label className="block font-body text-xs font-semibold text-[var(--color-on-surface-variant)] mb-1 ml-1">Search conversations</label>
+                        <div className="relative flex items-center group">
+                            <span className="material-symbols-outlined absolute left-4 text-[var(--color-on-surface-variant)] group-focus-within:text-[var(--color-primary)] transition-colors">search</span>
+                            <input className="w-full h-12 pl-12 pr-4 bg-[var(--color-surface-variant)] border-none outline-none rounded-xl focus:ring-1 focus:ring-[var(--color-primary)] focus:bg-[var(--color-surface-container-lowest)] transition-all placeholder:text-[var(--color-on-surface-variant)]/50" placeholder="Find contacts or keywords..." type="text"/>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 scroll-smooth custom-scrollbar">
-                <AnimatePresence>
-                {messageList.map((messageContent, index) => {
-                  const isMe = (messageContent.sender?.name === username) || (messageContent.author === username);
-                  
-                  const prevMessage = index > 0 ? messageList[index - 1] : null;
-                  const prevSender = prevMessage?.sender?.name || prevMessage?.author;
-                  const currentSender = messageContent.sender?.name || messageContent.author;
-                  const isGrouped = prevSender === currentSender;
-                  
-                  return (
-                    <motion.div
-                      key={messageContent.id || messageContent.tempId || index}
-                      initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      transition={{ duration: 0.3, type: "spring", stiffness: 200, damping: 20 }}
-                      className={`flex w-full ${isMe ? "justify-end" : "justify-start"}`}
-                      style={{ marginTop: isGrouped ? '4px' : '24px' }}
-                    >
-                      {/* Avatar */}
-                      {!isMe && !isGrouped && (
-                        <div className="mr-3 flex-shrink-0 self-end mb-1">
-                          {messageContent.sender?.image || messageContent.image ? (
-                            <img 
-                              src={messageContent.sender?.image || messageContent.image} 
-                              alt={currentSender} 
-                              className="w-8 h-8 rounded-full border border-white/10 shadow-md"
-                            />
-                          ) : (
-                            <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-white text-[10px] font-bold border border-white/10">
-                              {currentSender?.charAt(0).toUpperCase()}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      
-                      {/* Spacer for proper alignment if grouped */}
-                      {!isMe && isGrouped && <div className="w-11 mr-0 flex-shrink-0"></div>}
-                      
-                      <div className={`max-w-[85%] md:max-w-[70%] lg:max-w-[60%] flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                        {/* Sender Name */}
-                        {!isMe && !isGrouped && (
-                            <span className="text-[10px] text-slate-400 ml-1 mb-1">{currentSender}</span>
-                        )}
-
-                        <div className={`relative px-5 py-3 shadow-md backdrop-blur-sm
-                            ${isMe 
-                            ? "bg-gradient-to-br from-indigo-600 to-violet-600 text-white rounded-2xl rounded-tr-sm" 
-                            : "glass text-gray-200 border border-white/5 rounded-2xl rounded-tl-sm"
-                        }`}>
-                          <p className="text-[14px] md:text-[15px] leading-relaxed tracking-wide font-light">{messageContent.content}</p>
-                        </div>
-                        
-                        {/* Timestamp & Status */}
-                        <div className={`flex items-center gap-1 mt-1 opacity-70 text-[10px] font-medium ${isMe ? 'mr-1' : 'ml-1'}`}>
-                              <span className="text-slate-500">
-                                  {messageContent.timestamp ? new Date(messageContent.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : messageContent.time}
-                              </span>
-                              {isMe && (
-                                  <span className="ml-1">
-                                      {messageContent.status === 'seen' && <span className="text-blue-400">✓✓</span>}
-                                      {messageContent.status === 'sent' && <span className="text-slate-400">✓</span>}
-                                      {messageContent.status === 'sending' && <span className="text-slate-500 animate-pulse">...</span>}
-                                      {messageContent.status === 'error' && <span className="text-red-400">⚠</span>}
-                                  </span>
-                              )}
-                        </div>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-                </AnimatePresence>
-                
-                {/* Typing Indicator */}
-                <AnimatePresence>
-                {typingUsers.length > 0 && (
-                    <motion.div 
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        className="flex justify-start ml-12 mt-2"
-                    >
-                        <div className="glass px-4 py-2 rounded-full rounded-tl-none border border-white/10 flex items-center gap-2">
-                             <TypingIndicator />
-                             <span className="text-[10px] text-slate-400">Typing...</span>
-                        </div>
-                    </motion.div>
                 )}
-                </AnimatePresence>
-                
-                <div ref={messagesEndRef} className="h-4" />
             </div>
 
-            {/* Input Area */}
-            <div className="p-6 pt-2 pb-6 z-20">
-              <div className="glass p-1.5 rounded-full flex items-center shadow-2xl border border-white/10 relative">
-                <input
-                  type="text"
-                  value={message}
-                  placeholder="Type your message..."
-                  className="flex-1 bg-transparent border-none focus:ring-0 outline-none text-gray-200 placeholder-slate-500 px-4 h-12"
-                  onChange={handleTyping}
-                  onKeyPress={(event) => {
-                    event.key === "Enter" && sendMessage();
-                  }}
-                />
-                
-                <button 
-                    onClick={sendMessage}
-                    disabled={!message.trim()}
-                    className={`h-10 w-10 mr-1 rounded-full flex items-center justify-center transition-all duration-300
-                      ${message.trim() 
-                        ? 'bg-gradient-to-tr from-indigo-500 to-violet-500 text-white shadow-[0_0_15px_rgba(99,102,241,0.5)] hover:scale-110 active:scale-95' 
-                        : 'bg-white/5 text-white/20 cursor-not-allowed'
-                      }`}
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 ml-0.5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-                    </svg>
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-        </AnimatePresence>
+            <div className="flex-grow overflow-y-auto px-4 space-y-2 pb-8 custom-scrollbar">
+                {activeTab === 'chats' && (
+                  <>
+                     <h3 className="text-xs font-bold text-[var(--color-on-surface-variant)] mb-3 mt-4 uppercase tracking-widest px-2 font-display">Public Rooms</h3>
+                     <div 
+                        onClick={() => joinRoom('global_forum', 'Global Forum')}
+                        className={`p-4 rounded-2xl transition-colors flex items-center gap-4 cursor-pointer group ${room === 'global_forum' ? 'bg-[var(--color-surface-container-lowest)] shadow-ambient' : 'hover:bg-[var(--color-surface-container-low)]'}`}
+                     >
+                        <div className="relative shrink-0">
+                           <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${room === 'global_forum' ? 'cta-gradient text-[var(--color-on-primary)]' : 'bg-[var(--color-surface-container-high)] text-[var(--color-secondary-dim)]'}`}>
+                              <span className="material-symbols-outlined">groups</span>
+                           </div>
+                        </div>
+                        <div className="flex-grow min-w-0">
+                           <div className="flex justify-between items-baseline mb-1">
+                              <h3 className="font-display font-bold text-[var(--color-on-surface)] truncate">Global Forum</h3>
+                              <span className="font-body text-[11px] text-[var(--color-on-surface-variant)]/60">Always Open</span>
+                           </div>
+                           <p className="text-sm text-[var(--color-on-surface-variant)] truncate">Join the public discussion!</p>
+                        </div>
+                     </div>
 
-        {activeTab === 'community' && <LiveThread />}
-      </div>
+                     <h3 className="text-xs font-bold text-[var(--color-on-surface-variant)] mb-3 mt-6 uppercase tracking-widest px-2 font-display">Friends</h3>
+                     {(!user.friends || user.friends.length === 0) ? (
+                        <div className="p-4 rounded-xl border border-dashed border-[var(--color-outline-variant)] text-center mt-2">
+                             <p className="text-sm text-[var(--color-on-surface-variant)]">No friends yet.</p>
+                             <button onClick={() => setActiveTab('search')} className="text-xs text-[var(--color-primary)] font-bold mt-1 underline">Find people</button>
+                        </div>
+                     ) : (
+                         user.friends.map((friend) => {
+                             const isOnline = activeUsers.some(u => u.id === friend.id);
+                             const isActiveChat = room.includes(friend.id);
+                             return (
+                                 <div 
+                                     key={friend.id} 
+                                     onClick={() => startPrivateChat(friend)}
+                                     className={`p-4 rounded-2xl transition-colors flex items-center gap-4 cursor-pointer group relative overflow-hidden ${isActiveChat ? 'bg-[var(--color-surface-container-lowest)] shadow-[0_8px_24px_rgba(39,46,66,0.06)]' : 'hover:bg-[var(--color-surface-container-low)]'}`}
+                                 >
+                                     {isActiveChat && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-10 bg-[var(--color-secondary)] rounded-r-full"></div>}
+                                     <div className="relative shrink-0">
+                                         {friend.image ? (
+                                            <img src={friend.image} alt={friend.name} className={`w-14 h-14 rounded-full object-cover border-2 transition-all duration-300 ${isOnline ? 'border-[var(--color-secondary)]' : 'border-transparent grayscale group-hover:grayscale-0'}`} />
+                                         ) : (
+                                            <div className={`w-14 h-14 rounded-full flex items-center justify-center text-[var(--color-on-surface)] text-bold text-xl relative shadow-ambient ghost-border bg-[var(--color-surface-variant)]`}>
+                                                {friend.name.charAt(0).toUpperCase()}
+                                            </div>
+                                         )}
+                                         {isOnline && <div className="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-green-500 border-4 border-[var(--color-surface-container-lowest)]"></div>}
+                                     </div>
+                                     <div className="flex-grow min-w-0">
+                                         <div className="flex justify-between items-baseline mb-1">
+                                             <h3 className="font-display font-bold text-[var(--color-on-surface)] truncate">{friend.name}</h3>
+                                             {isOnline && <span className="font-body text-[11px] font-medium text-[var(--color-primary)]">Online</span>}
+                                         </div>
+                                         <p className="text-sm text-[var(--color-on-surface-variant)] truncate">Click to start chatting</p>
+                                     </div>
+                                 </div>
+                             );
+                         })
+                     )}
+                  </>
+                )}
+                {activeTab === 'search' && <SearchUsers currentUser={user} />}
+                {activeTab === 'requests' && <FriendRequests currentUser={user} onActionComplete={refreshUser} />}
+            </div>
+         </section>
+
+         {/* Right Pane: Chat Interface + Details Feature */}
+         <section className={`flex-grow bg-[var(--color-surface)] flex-row relative overflow-hidden ${activeTab === 'community' ? 'flex' : 'hidden md:flex'}`}>
+            <AnimatePresence mode="wait">
+            {activeTab === 'community' ? (
+               <motion.div 
+                 key="community-feed"
+                 initial={{ opacity: 0 }}
+                 animate={{ opacity: 1 }}
+                 exit={{ opacity: 0 }}
+                 className="flex-1 h-full relative w-full"
+               >
+                  <CommunityFeed user={user} />
+               </motion.div>
+            ) : activeTab !== 'chats' ? (
+               <motion.div 
+                 key="empty-state"
+                 initial={{ opacity: 0 }}
+                 animate={{ opacity: 1 }}
+                 exit={{ opacity: 0 }}
+                 className="flex-1 h-full relative w-full"
+               >
+                 <EmptyState type={activeTab} />
+               </motion.div>
+            ) : (
+                <motion.div 
+                 key="chat-interface"
+                 initial={{ opacity: 0 }}
+                 animate={{ opacity: 1 }}
+                 exit={{ opacity: 0 }}
+                 className="flex-1 flex w-full h-full relative"
+               >
+                 
+               <div className="flex-1 flex flex-col h-full relative bg-[var(--color-surface)] min-w-0">
+                 {/* Decorative element */}
+                 <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-gradient-to-bl from-[var(--color-primary)]/5 to-transparent rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+
+                 {/* Top App Bar from Active Conversation */}
+                 <header className="h-20 bg-[var(--color-surface)]/80 custom-glass sticky top-0 z-50 flex justify-between items-center w-full px-8 shadow-[0_8px_24px_rgba(39,46,66,0.06)] border-b ghost-border">
+                     <div className="flex items-center gap-4">
+                         <div className="relative">
+                            {room.includes('-') && user?.friends?.find(f => chatName === f.name)?.image ? (
+                                <img src={user.friends.find(f => chatName === f.name).image} className="w-11 h-11 rounded-2xl object-cover ring-2 ring-[var(--color-surface-container-low)]" />
+                            ) : (
+                                <div className="w-11 h-11 rounded-2xl bg-[var(--color-surface-container-high)] flex items-center justify-center font-bold text-[var(--color-on-surface)] ring-2 ring-[var(--color-surface-container-low)]">
+                                    {chatName.charAt(0).toUpperCase()}
+                                </div>
+                            )}
+                            {room.includes('-') && (
+                                <span className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-[var(--color-surface)] ${activeUsers.some(u => u.name === chatName) ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
+                            )}
+                         </div>
+                         <div>
+                             <h2 className="font-display text-lg font-black text-[var(--color-on-background)] tracking-tight">
+                                {room.includes('-') ? (chatName || 'Private Chat') : `#${chatName || room}`}
+                             </h2>
+                             <div className="flex items-center gap-2">
+                                 <p className="text-xs font-body text-[var(--color-on-surface-variant)]">{room.includes('-') ? 'User Profile' : 'Public Channel'}</p>
+                                 {typingUsers.length > 0 && room.includes('-') && (
+                                     <>
+                                        <span className="w-1 h-1 bg-[var(--color-outline-variant)] rounded-full"></span>
+                                        <p className="text-[10px] uppercase tracking-widest text-[var(--color-secondary)] font-bold">Typing...</p>
+                                     </>
+                                 )}
+                             </div>
+                         </div>
+                     </div>
+                     <div className="flex items-center gap-2">
+                          <button className="p-2.5 rounded-xl hover:bg-[var(--color-surface-container-high)] transition-colors text-[var(--color-on-surface-variant)]">
+                              <span className="material-symbols-outlined">search</span>
+                          </button>
+                          <button className="p-2.5 rounded-xl hover:bg-[var(--color-surface-container-high)] transition-colors text-[var(--color-on-surface-variant)]">
+                              <span className="material-symbols-outlined">notifications</span>
+                          </button>
+                          <button
+                            onClick={() => setShowDetailPane(p => !p)}
+                            className={`p-2.5 rounded-xl transition-colors ${
+                              showDetailPane
+                                ? 'bg-[var(--color-primary-container)] text-[var(--color-primary)]'
+                                : 'hover:bg-[var(--color-surface-container-high)] text-[var(--color-on-surface-variant)]'
+                            }`}>
+                              <span className="material-symbols-outlined">more_vert</span>
+                          </button>
+                      </div>
+                 </header>
+
+                 {/* Back button — visible on mobile when in chat */}
+                 {room && (
+                   <div className="flex md:hidden px-4 pt-3">
+                     <button onClick={() => { setShowChat(false); setShowDetailPane(false); }}
+                       className="flex items-center gap-1 text-xs text-[var(--color-primary)] font-bold">
+                       <span className="material-symbols-outlined text-[16px]">arrow_back</span> Back to Inbox
+                     </button>
+                   </div>
+                 )}
+
+                 {/* Message Stream */}
+                 <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-10 scroll-smooth custom-scrollbar relative z-10">
+                     <div className="flex justify-center">
+                         <span className="px-4 py-1.5 rounded-full bg-[var(--color-surface-container-low)] text-[var(--color-on-surface-variant)] text-[10px] font-bold tracking-widest uppercase">Start of conversation</span>
+                     </div>
+                     
+                     <AnimatePresence>
+                     {messageList.map((messageContent, index) => {
+                       const isMe = (messageContent.sender?.name === username) || (messageContent.author === username);
+                       const currentSender = messageContent.sender?.name || messageContent.author;
+                       
+                       return (
+                           <motion.div
+                               key={messageContent.id || messageContent.tempId || index}
+                               initial={{ opacity: 0, y: 10 }}
+                               animate={{ opacity: 1, y: 0 }}
+                               className={`flex gap-4 max-w-2xl ${isMe ? 'ml-auto flex-row-reverse' : ''}`}
+                           >
+                               {!isMe ? (
+                                   <div className="shrink-0">
+                                       {messageContent.sender?.image || messageContent.image ? (
+                                           <img src={messageContent.sender?.image || messageContent.image} className="w-8 h-8 rounded-lg mt-auto object-cover" />
+                                       ) : (
+                                           <div className="w-8 h-8 rounded-lg bg-[var(--color-surface-variant)] mt-auto flex items-center justify-center text-[10px] font-bold text-[var(--color-on-surface)] border border-[var(--color-outline-variant)]/10">
+                                               {currentSender?.charAt(0).toUpperCase()}
+                                           </div>
+                                       )}
+                                   </div>
+                               ) : (
+                                   <div className="shrink-0 flex items-end">
+                                      <div className="w-8 h-8 rounded-lg bg-[var(--color-primary-fixed)] mt-auto flex items-center justify-center text-[10px] font-black text-[var(--color-on-primary-fixed-variant)]">ME</div>
+                                   </div>
+                               )}
+                               <div className={`space-y-2 ${isMe ? 'flex flex-col items-end' : ''}`}>
+                                   {!isMe && !room.includes('-') && <span className="text-[10px] text-[var(--color-on-surface-variant)] ml-1 font-bold">{currentSender}</span>}
+                                   
+                                   <div className={`${isMe ? 'bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-dim)] text-[var(--color-on-primary)] shadow-[0_8px_20px_rgba(74,64,224,0.15)] asymmetric-outgoing' : 'bg-[var(--color-surface-container-lowest)] text-[var(--color-on-surface)] shadow-[0_4px_12px_rgba(39,46,66,0.03)] border border-[var(--color-outline-variant)]/5 asymmetric-incoming'} p-6 rounded-2xl`}>
+                                        <p className="leading-relaxed font-body whitespace-pre-line break-words max-w-full text-sm">{messageContent.content}</p>
+                                   </div>
+
+                                   <div className={`flex items-center gap-1.5 ${isMe ? 'mr-0 justify-end' : 'ml-0'}`}>
+                                        <span className="text-[10px] text-[var(--color-outline)] px-1">
+                                             {messageContent.timestamp ? new Date(messageContent.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : messageContent.time}
+                                        </span>
+                                        {isMe && (
+                                            <span className="flex items-center">
+                                                {messageContent.status === 'seen' && (
+                                                  <svg width="16" height="11" viewBox="0 0 16 11" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                    <path d="M1 5.5L4.5 9L10 3" stroke="var(--color-primary)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                                                    <path d="M6 5.5L9.5 9L15 3" stroke="var(--color-primary)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                                                  </svg>
+                                                )}
+                                                {messageContent.status === 'sent' && (
+                                                  <svg width="16" height="11" viewBox="0 0 16 11" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                    <path d="M1 5.5L4.5 9L10 3" stroke="var(--color-outline-variant)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                                                    <path d="M6 5.5L9.5 9L15 3" stroke="var(--color-outline-variant)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                                                  </svg>
+                                                )}
+                                                {messageContent.status === 'sending' && <span className="text-[var(--color-on-surface-variant)]/50 text-xs animate-pulse">·</span>}
+                                                {messageContent.status === 'error' && <span className="text-[var(--color-error)] text-xs">⚠</span>}
+                                            </span>
+                                        )}
+                                    </div>
+                               </div>
+                           </motion.div>
+                       )
+                     })}
+                     </AnimatePresence>
+                     
+                     <AnimatePresence>
+                     {typingUsers.length > 0 && !room.includes('-') && ( /* Show in-feed typing only for group chats */
+                         <motion.div 
+                             initial={{ opacity: 0, y: 10 }}
+                             animate={{ opacity: 1, y: 0 }}
+                             exit={{ opacity: 0 }}
+                             className="flex gap-4 max-w-2xl"
+                         >
+                             <div className="space-y-2">
+                                 <div className="bg-[var(--color-surface-container-lowest)] asymmetric-incoming p-4 rounded-2xl shadow-sm flex items-center gap-2 border border-[var(--color-outline-variant)]/5">
+                                     <TypingIndicator />
+                                     <span className="text-[10px] text-[var(--color-on-surface-variant)] ml-2">Someone is typing...</span>
+                                 </div>
+                             </div>
+                         </motion.div>
+                     )}
+                     </AnimatePresence>
+                     <div ref={messagesEndRef} className="h-4" />
+                 </div>
+
+                 {/* Message Input Area (Floating Footer) */}
+                 <footer className="p-6 md:p-8 shrink-0 bg-[var(--color-surface-container-low)]/50 custom-glass border-t border-[var(--color-outline-variant)]/10 z-20">
+                     <div className="max-w-5xl mx-auto flex items-center gap-4">
+                         <div className="flex items-center gap-1">
+                             <button className="p-3 rounded-2xl hover:bg-[var(--color-surface-container-high)] text-[var(--color-on-surface-variant)] transition-all">
+                                 <span className="material-symbols-outlined">add_circle</span>
+                             </button>
+                             <button className="p-3 rounded-2xl hover:bg-[var(--color-surface-container-high)] text-[var(--color-on-surface-variant)] transition-all hidden sm:block">
+                                 <span className="material-symbols-outlined">image</span>
+                             </button>
+                         </div>
+                         <div className="flex-1 relative">
+                             <input 
+                                 className="w-full h-14 pl-6 pr-14 rounded-2xl bg-[var(--color-surface-container-lowest)] border-none ring-1 ring-[var(--color-outline-variant)]/20 focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none transition-all font-body text-[var(--color-on-surface)] placeholder:text-[var(--color-outline-variant)]" 
+                                 placeholder="Type a thoughtful response..." 
+                                 type="text"
+                                 value={message}
+                                 onChange={handleTyping}
+                                 onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                             />
+                             <button className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-[var(--color-on-surface-variant)] hover:text-[var(--color-primary)] transition-colors hidden sm:block">
+                                 <span className="material-symbols-outlined">sentiment_satisfied</span>
+                             </button>
+                         </div>
+                         <button 
+                             onClick={sendMessage}
+                             disabled={!message.trim()}
+                             className="w-14 h-14 shrink-0 rounded-2xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-primary-dim)] text-[var(--color-on-primary)] flex items-center justify-center shadow-[0_12px_24px_rgba(74,64,224,0.25)] hover:scale-105 active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:scale-100 disabled:shadow-none"
+                         >
+                             <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>send</span>
+                         </button>
+                     </div>
+                     <div className="max-w-5xl mx-auto mt-4 px-1 flex items-center gap-2">
+                         <div className="flex -space-x-2">
+                             {user?.image ? (
+                                <img src={user.image} className="w-5 h-5 rounded-full ring-2 ring-[var(--color-surface)] bg-[var(--color-surface-variant)] object-cover" />
+                             ) : (
+                                <div className="w-5 h-5 rounded-full ring-2 ring-[var(--color-surface)] bg-[var(--color-surface-variant)] overflow-hidden flex items-center justify-center text-[8px] font-black">{username.charAt(0)}</div>
+                             )}
+                             <div className="w-5 h-5 rounded-full ring-2 ring-[var(--color-surface)] bg-[var(--color-primary-fixed)] flex items-center justify-center text-xs font-black text-[var(--color-on-primary-fixed-variant)]"></div>
+                         </div>
+                         <p className="text-[10px] font-body text-[var(--color-on-surface-variant)]">Active in <span className="font-bold">{room.includes('-') ? (chatName || 'Private Chat') : `#${chatName || room}`}</span></p>
+                     </div>
+                 </footer>
+               </div>
+                           {/* Right Detail Pane — slide in from right on ⋮ click */}
+               <AnimatePresence>
+               {showDetailPane && room.includes('-') && (
+                   <motion.aside
+                     key="detail-pane"
+                     initial={{ x: '100%', opacity: 0 }}
+                     animate={{ x: 0, opacity: 1 }}
+                     exit={{ x: '100%', opacity: 0 }}
+                     transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+                     className="flex flex-col w-80 bg-[var(--color-surface-container-low)] border-l ghost-border p-8 space-y-8 z-30 shrink-0 overflow-y-auto custom-scrollbar"
+                   >
+                     {(() => {
+                        const friend = user?.friends?.find(f => f.name === chatName);
+                        const isOnline = activeUsers.some(u => u.name === chatName);
+                        return (
+                            <>
+                             <div className="text-center space-y-4">
+                                 <div className="relative inline-block">
+                                     {friend?.image ? (
+                                         <img src={friend.image} className="w-32 h-32 rounded-[2rem] object-cover shadow-xl" />
+                                     ) : (
+                                         <div className="w-32 h-32 rounded-[2rem] bg-[var(--color-surface-container-high)] ghost-border flex items-center justify-center text-5xl font-black text-[var(--color-on-surface)] shadow-md">
+                                             {chatName?.charAt(0).toUpperCase()}
+                                         </div>
+                                     )}
+                                     {isOnline && <div className="absolute bottom-1 right-1 w-6 h-6 bg-[var(--color-secondary)] border-4 border-[var(--color-surface-container-low)] rounded-full"></div>}
+                                 </div>
+                                 <div>
+                                     <h3 className="font-display text-xl font-black text-[var(--color-on-surface)] tracking-tight">{chatName}</h3>
+                                     <p className="text-sm font-body text-[var(--color-on-surface-variant)]">Member</p>
+                                 </div>
+                             </div>
+                             <div className="space-y-6">
+                                 <div>
+                                     <h4 className="text-[10px] font-bold tracking-widest uppercase text-[var(--color-outline)] mb-3">Professional Bio</h4>
+                                     <p className="text-xs font-body text-[var(--color-on-surface)] leading-relaxed">Dedicated user of the Cognitive Gallery chat platform. Connected to the network.</p>
+                                 </div>
+                                 <div>
+                                     <h4 className="text-[10px] font-bold tracking-widest uppercase text-[var(--color-outline)] mb-3">Recent Artifacts</h4>
+                                     <div className="grid grid-cols-3 gap-2">
+                                         <div className="aspect-square rounded-lg bg-gradient-to-tr from-indigo-100 to-indigo-200 border border-[var(--color-outline-variant)]/20"></div>
+                                         <div className="aspect-square rounded-lg bg-gradient-to-bl from-teal-50 to-teal-100 border border-[var(--color-outline-variant)]/20"></div>
+                                         <div className="aspect-square rounded-lg bg-[var(--color-surface-container-high)] flex items-center justify-center text-[var(--color-primary)] border border-[var(--color-outline-variant)]/20 hover:bg-[var(--color-surface-variant)] transition-all cursor-pointer">
+                                             <span className="material-symbols-outlined">add</span>
+                                         </div>
+                                     </div>
+                                 </div>
+                                 <div className="pt-4 space-y-3">
+                                     <button className="w-full py-3 px-4 rounded-xl bg-[var(--color-surface-container-lowest)] ghost-border text-[var(--color-on-surface)] font-semibold text-xs flex items-center justify-between hover:bg-[var(--color-surface-container-high)] transition-colors">
+                                         <span className="flex items-center gap-3"><span className="material-symbols-outlined text-[var(--color-secondary)]">history</span> Thread History</span>
+                                         <span className="material-symbols-outlined text-[var(--color-outline)]">chevron_right</span>
+                                     </button>
+                                     <button className="w-full py-3 px-4 rounded-xl bg-[var(--color-surface-container-lowest)] ghost-border text-[var(--color-on-surface)] font-semibold text-xs flex items-center justify-between hover:bg-[var(--color-surface-container-high)] transition-colors">
+                                         <span className="flex items-center gap-3"><span className="material-symbols-outlined text-[var(--color-secondary)]">share</span> Shared Assets</span>
+                                         <span className="material-symbols-outlined text-[var(--color-outline)]">chevron_right</span>
+                                     </button>
+                                 </div>
+                             </div>
+                             <div className="mt-auto p-5 rounded-2xl bg-[var(--color-error-container)]/10 border border-[var(--color-error-container)]/5">
+                                 <button className="w-full flex items-center gap-3 text-[var(--color-error)] font-bold text-xs hover:text-[var(--color-error-container)] transition-colors">
+                                     <span className="material-symbols-outlined">block</span>
+                                     Flag for Review
+                                 </button>
+                             </div>
+                            </>
+                        )
+                     })()}
+                   </motion.aside>
+               )}
+               </AnimatePresence>
+               </motion.div>
+             )}
+              </AnimatePresence>
+         </section>
+      </main>
+      </>
+      )}
     </div>
   );
 }

@@ -451,6 +451,25 @@ app.get('/api/users/me', authenticateToken, async (req, res) => {
     }
 });
 
+// Update Current User Profile (name, image URL)
+app.patch('/api/users/me', authenticateToken, async (req, res) => {
+    const { name, image } = req.body;
+    const updateData = {};
+    if (name && name.trim()) updateData.name = name.trim();
+    if (typeof image === 'string') updateData.image = image; // URL or base64
+    try {
+        const user = await prisma.user.update({
+            where: { id: req.user.userId },
+            data: updateData,
+            include: { friends: true }
+        });
+        res.json(user);
+    } catch (e) {
+        console.error("Error updating profile:", e);
+        res.status(500).json({ error: "Failed to update profile" });
+    }
+});
+
 // Send Request
 app.post('/api/friend-request/send', authenticateToken, async (req, res) => {
     const { senderId, receiverId } = req.body;
@@ -597,14 +616,33 @@ app.post('/api/posts/:postId/comments', authenticateToken, async (req, res) => {
     }
 });
 
-// News API
+// News API - all recent news mixed for Live Thread pane
+app.get('/api/news/live', async (req, res) => {
+    const { extended } = req.query;
+    try {
+        const since = extended === 'true'
+            ? new Date(Date.now() - 3 * 60 * 60 * 1000)
+            : new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const news = await prisma.newsArticle.findMany({
+            where: { pubDate: { gte: since } },
+            orderBy: { pubDate: 'desc' },
+            take: extended === 'true' ? 50 : 20
+        });
+        res.json(news);
+    } catch (error) {
+        console.error("Error fetching live news:", error);
+        res.status(500).json({ error: "Failed to fetch news" });
+    }
+});
+
+// News API - by category
 app.get('/api/news/:category', async (req, res) => {
     const { category } = req.params;
     try {
         const news = await prisma.newsArticle.findMany({
             where: { category },
             orderBy: { pubDate: 'desc' },
-            take: 15
+            take: 20
         });
         res.json(news);
     } catch (error) {
@@ -656,6 +694,27 @@ app.post('/api/posts', authenticateToken, async (req, res) => {
         console.error("Error creating post:", error);
         res.status(500).json({ error: "Failed to create post" });
     }
+});
+
+// Post Likes / Reactions (simple toggle stored in-memory per server session)
+const postLikes = new Map(); // postId -> Set of userIds who liked
+
+app.post('/api/posts/:postId/like', authenticateToken, async (req, res) => {
+    const { postId } = req.params;
+    const userId = req.user.userId;
+    const key = parseInt(postId);
+    if (!postLikes.has(key)) postLikes.set(key, new Set());
+    const likers = postLikes.get(key);
+    const liked = likers.has(userId);
+    if (liked) likers.delete(userId); else likers.add(userId);
+    res.json({ liked: !liked, count: likers.size });
+});
+
+app.get('/api/posts/:postId/likes', authenticateToken, async (req, res) => {
+    const { postId } = req.params;
+    const userId = req.user.userId;
+    const likers = postLikes.get(parseInt(postId)) || new Set();
+    res.json({ liked: likers.has(userId), count: likers.size });
 });
 
 server.listen(PORT, () => {

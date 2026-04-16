@@ -4,7 +4,7 @@ import Login from './components/Login';
 import Signup from './components/Signup';
 import WelcomeScreen from './components/WelcomeScreen';
 import { AnimatePresence, motion } from 'framer-motion';
-
+import { ThemeProvider } from './ThemeContext';
 import api from './api';
 
 function App() {
@@ -13,7 +13,12 @@ function App() {
   const [view, setView] = useState("login"); // login, signup, welcome, chat
   const [initialViewTab, setInitialViewTab] = useState("chats");
 
-  const fetchUserInfo = async () => {
+  const fetchUserInfo = async (preloadedUser = null) => {
+      if (preloadedUser) {
+          setUser(preloadedUser);
+          localStorage.setItem('user', JSON.stringify(preloadedUser));
+          return;
+      }
       try {
           console.log('Fetching updated user info...');
           const response = await api.get('/api/users/me');
@@ -64,6 +69,7 @@ function App() {
   };
 
   return (
+    <ThemeProvider>
     <div className="App">
       {view === "login" && (
         <Login 
@@ -105,6 +111,7 @@ function App() {
         )}
       </AnimatePresence>
     </div>
+    </ThemeProvider>
   );
 }
 
